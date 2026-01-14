@@ -44,3 +44,21 @@ function trace_x(rho,sys, dim)
     #now need to take the trace over axis 2 and axis 4, which in python is tr(C, axis1 = 1, axis2 = 3)
 end
 
+function rand_state(dim)
+    """
+    Produces a random matrix rho that represents the density matrix of a state, so rho obeys
+    positivity, rho >=0 (so all its eigenvalues are positive) and is unit trace,tr(rho)=1. 
+
+    Parameters
+    ---
+    dim: the dimensions of the space the state is defined on, so rho will be a dim by dim matrix
+
+    Returns
+    ---
+    rho: a dim by dim random matrix that is positive and has unit trace
+    """
+
+   A = randn(complex(Float64),(dim,dim))
+   pos_A = adjoint(A) * A
+   return pos_A/tr(pos_A)
+end
