@@ -1,4 +1,5 @@
 using LinearAlgebra
+using Tensorial
 
 function trace_x(rho,sys, dim)
     """
@@ -62,3 +63,30 @@ function rand_state(dim)
    pos_A = adjoint(A) * A
    return pos_A/tr(pos_A)
 end
+
+function rand_CPTP(dim_in, dim_out)
+    """
+    Produces a the Choi matrix C of a random CPTP map that goes from input space of dimensions dim_in
+    to an output space of dimensions dim_out, so C is unitary (adjoint(C)*C = identity on tensor product
+    of input and output space) and tracing out the output space gives an identity on the input space. 
+
+    Parameters
+    ---
+    dim_in: an integer, the dimension of the iput space
+    dim_out: an integer, the dimension of the output space
+
+    Returns
+    ---
+    C: the choi matrix of random CPTP map going from input to output space, so C is a dim_in*dim_out 
+    dimensional matrix.
+    """
+    D = dim_in * dim_out
+    A = randn(complex(Float64),(D,D))
+    pos_A = adjoint(A) * A
+    #trace out the output space, so sys is space 2, and dim is the dimensions of the two subspaes A is defined on
+    E = tr_x(pos_A, 2, [dim_in, dim_out]) #this wont work yet
+    B = inv(sqrt(E)) ⊗ Matrix{Int64}(I,dim_out,dim_out)
+    C = B * pos_A * B
+    return C
+end
+
