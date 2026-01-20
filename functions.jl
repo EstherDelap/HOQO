@@ -53,4 +53,29 @@ function rand_CPTP(dim_in, dim_out)
 end
 
 
+function act_map_choi(choi, rho, dim_in, dim_out)
+    """
+    Given the choi matrix of a quantum map going from space with dimensions dim_in to space
+    with dimensions dim_out, the action of the map is computed on the state rho.
+
+    Parameters
+    ---
+    choi: a dim_in*dim_out dimensional matrix representing the choi state of a quantum map
+    rho: a density matrix of dimensions dim_in, our quantum state
+    dim_in: index, the dimensions of the input space of the quantum map
+    dim_out: index, the dimensions of the output space of the quantum map
+
+    Returns
+    ---
+    rho_new: the outcome of the quantum map acting on rho, given by tr_in(choi(I_out otimes rho^T)) 
+    """
+    total = choi * (Matrix{Int64}(I,dim_out,dim_out) ⊗ Transpose(rho))
+    return ptrace(total, [dim_in, dim_out], 1)
+end
+
+dim_in = 2
+dim_out = 3
+choi = rand_CPTP(dim_in, dim_out)
+rho = [ 1 1; 2 1]
+act_map_choi(choi, rho, dim_in, dim_out)
 
