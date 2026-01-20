@@ -1,5 +1,5 @@
 using LinearAlgebra
-using Tensorial
+using QuantumInformation
 
 function trace_x(rho,sys, dim)
     """
@@ -81,12 +81,22 @@ function rand_CPTP(dim_in, dim_out)
     dimensional matrix.
     """
     D = dim_in * dim_out
-    A = randn(complex(Float64),(D,D))
+    #A = randn(complex(Float64),(D,D))
+    A = randn(D,D)
+    #to produce a positive matrix, multiply the random matrix by its adjoint
     pos_A = adjoint(A) * A
+
     #trace out the output space, so sys is space 2, and dim is the dimensions of the two subspaes A is defined on
-    E = tr_x(pos_A, 2, [dim_in, dim_out]) #this wont work yet
+    E = ptrace(pos_A, [dim_in,dim_out],2)
+
     B = inv(sqrt(E)) ⊗ Matrix{Int64}(I,dim_out,dim_out)
+
     C = B * pos_A * B
+
     return C
 end
+
+choi = rand_CPTP(2, 2)
+#print(adjoint(choi) * choi)
+ptrace(choi,[2,2],2)
 
