@@ -52,6 +52,25 @@ function rand_CPTP(dim_in, dim_out)
     return C
 end
 
+function rand_rho(dim)
+    """
+    returns the density matrix of a random pure state of dimensions dim
+
+    Parameters
+    ---
+    dim: integer, the dimension of the space of the input space
+
+    Returns
+    ---
+    rho: a density matrix, so a matrix of size dim by dim that obeys tr(rho^2) = 1
+
+    """
+
+    v = randn(dim)
+    vec_norm = (1/ norm(v))*v #normalising the random vector of dimensions dim
+    return(vec_norm * vec_norm') #returns the density matrix of this normalised vector
+end
+
 
 function act_map_choi(choi, rho, dim_in, dim_out)
     """
@@ -73,9 +92,40 @@ function act_map_choi(choi, rho, dim_in, dim_out)
     return ptrace(total, [dim_in, dim_out], 1)
 end
 
-dim_in = 2
-dim_out = 3
-choi = rand_CPTP(dim_in, dim_out)
-rho = [ 1 1; 2 1]
-act_map_choi(choi, rho, dim_in, dim_out)
+function vec_choi(choi, dim_in, dim_out)
+    """
+    Generates the 'vecotised' version of the choi matrix, choi_v,  defined by the equation 
+    vec(choi*rho)= choi_v vec(rho)
 
+    Parameters
+    ---
+    choi: the choi matrix of a map going from input space to output space, so a matrix of 
+    dimensions dim_in*dim_out by dim_in*dim_out
+    dim_in: the dimensions of the input space
+    dim_out: the dimensions of the output space
+
+    Returns
+    ---
+    choi_v: the 'vectorised' version of the choi state, so a matrix of dimensions dim_in^2 by dim_out^2
+    """
+
+    #turn the choi matrix into a tensor so we can permute it's indices
+    choi_tensor = reshape(choi, (dim_in, dim_out, dim_in, dim_out)) 
+    choi_v = permutedims(choi_tensor, ( 1,3,2,4))
+    return(reshape(choi_v,(dim_in^2,dim_out^2)))
+end
+
+dim_in = 2
+dim_out = 2
+
+choi = rand_CPTP(dim_in, dim_out)
+rho = rand_rho(dim_in)
+
+rho_new = act_map_choi(choi, rho, dim_in, dim_out) #rho' derived using the choi matrix link product with rho, choi*rho
+
+rho_new_vec = reshape(vec_choi(choi, dim_in, dim_out)* vec(rho),(dim_out,dim_out)) #rho' derived through vectorisation of rho
+
+println(rho_new)
+println(rho_new_vec)
+
+#they should be qual, they are not
