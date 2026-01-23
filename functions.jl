@@ -43,14 +43,17 @@ function rand_CPTP(dim_in, dim_out)
     pos_A = adjoint(A) * A
 
     #trace out the output space, so sys is space 2, and dim is the dimensions of the two subspaes A is defined on
-    E = ptrace(pos_A, [dim_in,dim_out],2)
+    E = ptrace(pos_A, [dim_in,dim_out],2) #defined on input space
 
-    B = inv(sqrt(E)) ⊗ Matrix{Int64}(I,dim_out,dim_out)
-
-    C = B * pos_A * B
+    B = inv(sqrt(E)) ⊗ Matrix{Int64}(I,dim_out,dim_out) #defined on input and output space, ordered as (input,ouput)
+    
+    C = B * pos_A * B #ordered as (input, output, input, output) 
 
     return C
 end
+
+
+
 
 function rand_rho(dim)
     """
@@ -88,9 +91,11 @@ function act_map_choi(choi, rho, dim_in, dim_out)
     ---
     rho_new: the outcome of the quantum map acting on rho, given by tr_in(choi(I_out otimes rho^T)) 
     """
-    total = choi * (Matrix{Int64}(I,dim_out,dim_out) ⊗ Transpose(rho))
+    total = (Transpose(rho) ⊗ Matrix{Int64}(I,dim_out,dim_out) ) * choi 
+
     return ptrace(total, [dim_in, dim_out], 1)
 end
+
 
 function vec_choi(choi, dim_in, dim_out)
     """
@@ -111,21 +116,24 @@ function vec_choi(choi, dim_in, dim_out)
 
     #turn the choi matrix into a tensor so we can permute it's indices
     choi_tensor = reshape(choi, (dim_in, dim_out, dim_in, dim_out)) 
-    choi_v = permutedims(choi_tensor, ( 1,3,2,4))
-    return(reshape(choi_v,(dim_in^2,dim_out^2)))
+
+    choi_v = permutedims(choi_tensor, (1,3,2,4))
+
+    return reshape(choi_v,(dim_out^2,dim_in^2))
+
 end
 
-dim_in = 2
-dim_out = 2
+dim_in = 3
+dim_out = 3
 
-choi = rand_CPTP(dim_in, dim_out)
 rho = rand_rho(dim_in)
+choi = rand_CPTP(dim_in, dim_out)
 
-rho_new = act_map_choi(choi, rho, dim_in, dim_out) #rho' derived using the choi matrix link product with rho, choi*rho
+rho_1 = reshape(vec_choi(choi, dim_in, dim_out) * vec(rho), (dim_out, dim_out))
 
-rho_new_vec = reshape(vec_choi(choi, dim_in, dim_out)* vec(rho),(dim_out,dim_out)) #rho' derived through vectorisation of rho
+rho_2 = act_map_choi(choi, rho, dim_in, dim_out)
 
-println(rho_new)
-println(rho_new_vec)
+println(rho_1)
+println(rho_2)
 
-#they should be qual, they are not
+
