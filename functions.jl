@@ -111,23 +111,24 @@ function vec_choi(choi, dim_in, dim_out)
 
     Returns
     ---
-    choi_v: the 'vectorised' version of the choi state, so a matrix of dimensions dim_in^2 by dim_out^2
+    choi_v: the 'vectorised' version of the choi state, so a matrix of dimensions dim_out^2 by dim_in^2
     """
 
     #turn the choi matrix into a tensor so we can permute it's indices
-    choi_tensor = reshape(choi, (dim_in, dim_out, dim_in, dim_out)) 
+    choi_tensor = reshape(choi, (dim_out, dim_in, dim_out, dim_in)) #the choi matrix is stored as C_(i' i; j' j)
 
-    choi_v = permutedims(choi_tensor, (1,3,2,4))
+    choi_v = permutedims(choi_tensor, (1,3,2,4)) #permutes the indices to C_(i' j'; i j)
 
     return reshape(choi_v,(dim_out^2,dim_in^2))
 
 end
 
 dim_in = 3
-dim_out = 3
+dim_out = 4
 
 rho = rand_rho(dim_in)
 choi = rand_CPTP(dim_in, dim_out)
+
 
 rho_1 = reshape(vec_choi(choi, dim_in, dim_out) * vec(rho), (dim_out, dim_out))
 
@@ -135,5 +136,3 @@ rho_2 = act_map_choi(choi, rho, dim_in, dim_out)
 
 println(rho_1)
 println(rho_2)
-
-
