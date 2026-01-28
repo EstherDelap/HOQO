@@ -123,16 +123,58 @@ function vec_choi(choi, dim_in, dim_out)
 
 end
 
-dim_in = 3
-dim_out = 4
 
-rho = rand_rho(dim_in)
-choi = rand_CPTP(dim_in, dim_out)
+function haar_measure(dim)
+    """
+    Generates a random unitary matrix of dimensions dim sampled over the Haar harr_measure
 
+    Parameters
+    ---
+    dim: an integer, the dimensions of the desired matrix
 
-rho_1 = reshape(vec_choi(choi, dim_in, dim_out) * vec(rho), (dim_out, dim_out))
+    Returns
+    ---
+    q: a random matrix sampled over the Haar measure, code taken from arXiv.0609050, p. 11
 
-rho_2 = act_map_choi(choi, rho, dim_in, dim_out)
+    """
+    z = randn(Complex{Float64},(dim,dim))/sqrt(2) #random complex matrix 
+
+    F=qr(z)
+    q = F.Q #this is a unitary matrix, i.e. q*q'=idenitity
+    r=F.R
+    
+    d = diag(r) #this is a vecotr containg the diagonal elements of r
+    ph = d ./ broadcast(abs, d) #forming th diagonal matrix with each diagonal element being r_{ii}/|r_{ii}|
+    
+    Q = q .* ph  #element-wise matrix multiplication
+    return Q
+end
+
+function vec_unitary(U)
+    """
+    'Vectorise' the unitary U, such that rho'=U rho U^dag == U_v rho 
+
+    Inputs
+    ---
+    U: a unitary matrix, so a square matrix which obeys U*U'=i
+
+    Returns
+    ---
+    U_v: a vectorised version of the unitary matrix, so a matrix of size dim^2 by dim^2
+    """
+    dim = size(U,1)
+
+    U_dims = reshape(U ⊗ U', (dim,dim,dim,dim)) #break up U ⊗ ' so we can permute the dimensions
+
+    U_v = permutedims(U_dims, (2,3,1,4))
+    return reshape(U_v, (dim^2, dim^2))
+end
+
+dim = 5
+U = haar_measure(dim)
+rho = rand_rho(dim)
+rho_1 = U * rho * U'
+rho_2 = vec_unitary(U) * vec(rho)
 
 println(rho_1)
-println(rho_2)
+println(reshape(rho_2,(dim, dim)))
