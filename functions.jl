@@ -154,7 +154,7 @@ function vec_unitary(U)
     """
     'Vectorise' the unitary U, such that rho'=U rho U^dag == U_v rho 
 
-    Inputs
+    Parameters
     ---
     U: a unitary matrix, so a square matrix which obeys U*U'=i
 
@@ -164,17 +164,59 @@ function vec_unitary(U)
     """
     dim = size(U,1)
 
-    U_dims = reshape(U ⊗ U', (dim,dim,dim,dim)) #break up U ⊗ ' so we can permute the dimensions
+    U_dims = reshape(U ⊗ U', (dim,dim,dim,dim)) #break up U ⊗ U' so we can permute the dimensions
 
     U_v = permutedims(U_dims, (2,3,1,4))
     return reshape(U_v, (dim^2, dim^2))
 end
 
-dim = 5
-U = haar_measure(dim)
-rho = rand_rho(dim)
-rho_1 = U * rho * U'
-rho_2 = vec_unitary(U) * vec(rho)
+function apply_partial_unitary_vec(rho, a, U)
+    """
+    For the system-environment state rho and the auxilliary state a, applies the unitary to the system and auxilliary space using vectorisation
 
-println(rho_1)
-println(reshape(rho_2,(dim, dim)))
+    Parameters
+    ---
+    rho: the joint system-environment state, a square matrix of dimensions dim_sys*dim_env that is positive and of unit trace.
+    a: the auxilliary system initial state, a square matrix of dimensions dim_a, positive and unit trace (usually 2-dimensional)
+    U: the unitary matrix applied to the system and auxilliary space, so a square matrix of dimensions dim_sys*dim_a that obeys U*U'=I
+
+    Returns
+    ---
+    rho_new: a vectorised tri-partite state so a vector of size (dim_env*dim_sys*dim_a)^2, given by I_{env} ⊗ U_{sys,a} (rho_{env,sys} ⊗ a_{a}) 
+    """
+    dim_env = convert(Int,(size(rho)[1] * size(a)[1]) / size(U)[1])
+    state = vec(rho ⊗ a) #vectorised initial tripartite state, ordered (env,sys,aux)
+    transform= vec_unitary(Matrix{Int64}( I, dim_env, dim_env) ⊗ U) #'vectorised' version of I_env ⊗ U_{sys,aux}
+    return transform*state #vectorised rho' of dimensions (dim_sys*dim_env*dim_aux)^2
+end    
+
+function apply_partial_unitary(rho, a, U)
+    """
+    For the system environement state rho and the auxilliary space a, applies the unitary U to the systme and auxilliary space by the usual 
+    way
+
+    Parameters
+    ---
+    rho: the joint system-environment state, a square matrix of dimensions dim_sys*dim_env that is positive and of unit trace.
+    a: the auxilliary system initial state, a square matrix of dimensions dim_a, positive and unit trace (usually 2-dimensional)
+    U: the unitary matrix applied to the system and auxilliary space, so a square matrix of dimensions dim_sys*dim_a that obeys U*U'=I
+
+    Returns
+    ---
+    rho_new: a tri-partite state, so a square matrix of dimensions dim_env*dim_sys*dim_a, obtained by (I_env ⊗ U) (rho ⊗ a) (I_env ⊗ U)'
+    """
+    dim_env = convert(Int,(size(rho)[1] * size(a)[1]) / size(U)[1])
+    state = rho ⊗ a
+    mult = Matrix{Int64}(I, dim_env, dim_env) ⊗ U #I_env ⊗ U
+    return mult * state * mult' #(I_env ⊗ U) (rho ⊗ a) (I_env ⊗ U)'
+
+end
+
+
+rho = rand_rho(10) #dim = dim_sys*dim_env
+a=[1,0]*[1,0]' 
+U = haar_measure(5) #dim_sys*dim_a
+
+rho_1 = apply_partial_unitary_vec(rho, a, U)
+rho_2 = vec(apply_partial_unitary(rho, a, U))
+isapprox( rho_1, rho_2)
