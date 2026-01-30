@@ -212,11 +212,50 @@ function apply_partial_unitary(rho, a, U)
 
 end
 
+function prob_b(rho, dim_sys, dim_env, dim_aux)
+    """
+    Calculates the probabilities of measuring the auxilliary system in states in b_array, given rho is a tri-partitie state ordered as {env,sys,aux} 
+    and b_array is an array containg the values that the (two-dimensional) auxilliary system can take 
 
-rho = rand_rho(10) #dim = dim_sys*dim_env
+    Parameters
+    ---
+    rho: a tripartite state, so a square matrix of dimensions (dim_env*dim_sys*dim_aux) 
+    dim_sys: integer, the dimensions of the system
+    dim_env: integer, the dimensions of the environment
+    dim_aux: integer, the dimensions of the auxilliary system
+
+    Returns
+    ---
+    probs: an array of length b containg the probailities of measuring the auxilliary system in the basis states of the auxiliary system, so 
+    probs[1]=tr(rho[:,:,1,:,:,1]) and probs[2]=tr(rho[:,:,2,:,:,2]) (and usually the auxilliary system is two-dimensional)
+
+    """
+    # Not sute if this is correct, but the probabilities it returns do sum to 1
+    # I think the spaces are ordered as {env, sys, aux} and the way julia indexes things is opposite to how we think, 
+    #i therefore break it up the other way around, as {dim_aux,dim_sys,dim_env,dim_aux,dim_sys,dim_env}
+
+    rho_sep = reshape(rho,(dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env)) #i think this is the correct ordering of spaces... (opposite to what is intuitive)
+
+    probs=zeros(0) #an empty array
+
+    for b in range(1,dim_aux)
+        rho_b=reshape(rho_sep[b,:,:,b,:,:], (dim_sys*dim_env, dim_sys*dim_env)) #the subatrix rho_{i,i',b'';j,j',b''} then reshaped as a matrix
+        append!(probs, tr(rho_b)) #tr(rho_b) should be the probability that b is meaured 
+    end
+
+    return(probs) #an array of probabilities, should (and does) sum to 1
+end   
+
+dim_sys = 2
+dim_env = 2
+dim_aux = 2
+
+rho = rand_rho(dim_sys*dim_env) #dim = dim_sys*dim_env
 a=[1,0]*[1,0]' 
-U = haar_measure(5) #dim_sys*dim_a
+U = haar_measure(dim_sys*dim_aux) #dim_sys*dim_a
 
-rho_1 = apply_partial_unitary_vec(rho, a, U)
-rho_2 = vec(apply_partial_unitary(rho, a, U))
-isapprox( rho_1, rho_2)
+rho = reshape( apply_partial_unitary_vec(rho, a, U) , (dim_sys*dim_env*dim_aux, dim_env*dim_sys*dim_aux) )
+#rho_2 = vec(apply_partial_unitary(rho, a, U))
+#isapprox( rho_1, rho_2)
+
+prob_b(rho, dim_sys, dim_env, dim_aux)
