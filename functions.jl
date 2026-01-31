@@ -1,24 +1,7 @@
 using LinearAlgebra
 using QuantumInformation
+using StatsBase
 
-function rand_state(dim)
-    """
-    Produces a random matrix rho that represents the density matrix of a state, so rho obeys
-    positivity, rho >=0 (so all its eigenvalues are positive) and is unit trace,tr(rho)=1. 
-
-    Parameters
-    ---
-    dim: the dimensions of the space the state is defined on, so rho will be a dim by dim matrix
-
-    Returns
-    ---
-    rho: a dim by dim random matrix that is positive and has unit trace
-    """
-
-   A = randn(complex(Float64),(dim,dim))
-   pos_A = adjoint(A) * A
-   return pos_A/tr(pos_A)
-end
 
 function rand_CPTP(dim_in, dim_out)
     """
@@ -126,7 +109,7 @@ end
 
 function haar_measure(dim)
     """
-    Generates a random unitary matrix of dimensions dim sampled over the Haar harr_measure
+    Generates a random unitary matrix of dimensions dim sampled over the Haar measure
 
     Parameters
     ---
@@ -150,9 +133,10 @@ function haar_measure(dim)
     return Q
 end
 
+
 function vec_unitary(U)
     """
-    'Vectorise' the unitary U, such that rho'=U rho U^dag == U_v rho 
+    'Vectorise' the unitary U, such that rho'=U rho U^dag == U_v vec(rho) 
 
     Parameters
     ---
@@ -170,7 +154,7 @@ function vec_unitary(U)
     return reshape(U_v, (dim^2, dim^2))
 end
 
-function apply_partial_unitary_vec(rho, a, U)
+function apply_partial_unitary_vec(rho, a, U, dim_env)
     """
     For the system-environment state rho and the auxilliary state a, applies the unitary to the system and auxilliary space using vectorisation
 
@@ -184,13 +168,12 @@ function apply_partial_unitary_vec(rho, a, U)
     ---
     rho_new: a vectorised tri-partite state so a vector of size (dim_env*dim_sys*dim_a)^2, given by I_{env} ⊗ U_{sys,a} (rho_{env,sys} ⊗ a_{a}) 
     """
-    dim_env = convert(Int,(size(rho)[1] * size(a)[1]) / size(U)[1])
     state = vec(rho ⊗ a) #vectorised initial tripartite state, ordered (env,sys,aux)
     transform= vec_unitary(Matrix{Int64}( I, dim_env, dim_env) ⊗ U) #'vectorised' version of I_env ⊗ U_{sys,aux}
     return transform*state #vectorised rho' of dimensions (dim_sys*dim_env*dim_aux)^2
 end    
 
-function apply_partial_unitary(rho, a, U)
+function apply_partial_unitary(rho, a, U, dim_env)
     """
     For the system environement state rho and the auxilliary space a, applies the unitary U to the systme and auxilliary space by the usual 
     way
@@ -205,10 +188,10 @@ function apply_partial_unitary(rho, a, U)
     ---
     rho_new: a tri-partite state, so a square matrix of dimensions dim_env*dim_sys*dim_a, obtained by (I_env ⊗ U) (rho ⊗ a) (I_env ⊗ U)'
     """
-    dim_env = convert(Int,(size(rho)[1] * size(a)[1]) / size(U)[1])
-    state = rho ⊗ a
-    mult = Matrix{Int64}(I, dim_env, dim_env) ⊗ U #I_env ⊗ U
-    return mult * state * mult' #(I_env ⊗ U) (rho ⊗ a) (I_env ⊗ U)'
+    #dim_env = convert(Int,(size(rho)[1] * size(a)[1]) / size(U)[1])
+    state = rho ⊗ a #dim = dim_env*dim_sys*dim_aux
+    mult = Matrix{Int64}(I, dim_env, dim_env) ⊗ U #I_env ⊗ U, dim=dim_env*dim_sys*dim_aux
+    return mult * state * mult' #(I_env ⊗ U) (rho ⊗ a) (I_env ⊗ U)', a square matrix of dimensions dim_env*dim_sys*dim_aux
 
 end
 
@@ -219,7 +202,7 @@ function prob_b(rho, dim_sys, dim_env, dim_aux)
 
     Parameters
     ---
-    rho: a tripartite state, so a square matrix of dimensions (dim_env*dim_sys*dim_aux) 
+    rho: a tripartite state, so a 6 dimensional tensor {dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env}
     dim_sys: integer, the dimensions of the system
     dim_env: integer, the dimensions of the environment
     dim_aux: integer, the dimensions of the auxilliary system
@@ -234,28 +217,79 @@ function prob_b(rho, dim_sys, dim_env, dim_aux)
     # I think the spaces are ordered as {env, sys, aux} and the way julia indexes things is opposite to how we think, 
     #i therefore break it up the other way around, as {dim_aux,dim_sys,dim_env,dim_aux,dim_sys,dim_env}
 
-    rho_sep = reshape(rho,(dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env)) #i think this is the correct ordering of spaces... (opposite to what is intuitive)
-
     probs=zeros(0) #an empty array
 
     for b in range(1,dim_aux)
-        rho_b=reshape(rho_sep[b,:,:,b,:,:], (dim_sys*dim_env, dim_sys*dim_env)) #the subatrix rho_{i,i',b'';j,j',b''} then reshaped as a matrix
+        rho_b=reshape(rho[b,:,:,b,:,:], (dim_sys*dim_env, dim_sys*dim_env)) #the subatrix rho_{i,i',b'';j,j',b''} then reshaped as a matrix
         append!(probs, tr(rho_b)) #tr(rho_b) should be the probability that b is meaured 
     end
 
     return(probs) #an array of probabilities, should (and does) sum to 1
 end   
 
-dim_sys = 2
-dim_env = 2
-dim_aux = 2
+function weighted_rho(rho, probs ,dim_aux, dim_sys, dim_env)
+    """
+    given a tripartite rho, and the probabilities of measuring the different outcome of the auxiliary space are given by weights, samples rho according 
+    to weights, returning a normalised two-partite state rho_final 
 
-rho = rand_rho(dim_sys*dim_env) #dim = dim_sys*dim_env
+    Parameters
+    ---
+    rho: a tripartite state, so a rank-six tensor ordered as {dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env}
+    probs: an array of the probabilities of measuring the different outcomes of the auxilliary system, so of length dim_aux
+
+    Returns
+    ---
+    rho_new: a normalised two-partite state as a square matrix of dimensions dim_sys*dim_env
+
+    """
+
+    w = aweights(probs) #turned the array into type AbstractWeights (not sure if we should be using aweights or just weights)
+    index_list = collect(1:dim_aux) #a vector of integers from 1 to the length of weights== dim_aux (usually 2)
+    i = sample(index_list, w) #samples a value from index_list, weighted by the values in w 
+    rho_final = reshape(rho[i,:,:,i,:,:], (dim_sys*dim_env, dim_sys*dim_env))
+    
+    return(rho_final/tr(rho_final))
+end
+
+
+
+
+
+dim_sys = 2
+dim_env = 3
+dim_aux = 2
+rho = rand_rho(dim_sys*dim_env) #dim = dim_sys*dim_env (matrix)
 a=[1,0]*[1,0]' 
 U = haar_measure(dim_sys*dim_aux) #dim_sys*dim_a
 
-rho = reshape( apply_partial_unitary_vec(rho, a, U) , (dim_sys*dim_env*dim_aux, dim_env*dim_sys*dim_aux) )
-#rho_2 = vec(apply_partial_unitary(rho, a, U))
-#isapprox( rho_1, rho_2)
 
-prob_b(rho, dim_sys, dim_env, dim_aux)
+
+#CODE TO CHECK VEC_UNITARY WORKS
+
+#rho_dashed_normal = vec(U*rho*U')
+#rho_dashed_vec = vec_unitary(U) * vec(rho) #this is a vectorised version of rho' = U rho U^dag
+#println(isapprox(rho_dashed_normal, rho_dashed_vec))
+
+
+
+#CODE TO CHECL APPLY_PARTIAL_UNITARY_VEC WORKS
+
+rho_1 = apply_partial_unitary_vec(rho, a, U, dim_env) #takes in rho as a matrix on spaces {env, sys}, outputs a vector rho' on spaces {env, sys, aux} 
+#rho_2 = vec(apply_partial_unitary(rho, a, U, dim_env))
+#println(isapprox( rho_1, rho_2))
+
+rho_1_tensor = reshape(rho_1,(dim_aux,dim_sys,dim_env,dim_aux,dim_sys,dim_env))
+
+
+
+#CODE TO CHECK PROB_B WORKS (at least it returns probabilities that sum to 1)
+
+probs = prob_b( rho_1_tensor , dim_sys, dim_env, dim_aux) #rho must be a rank 6 tensor 
+#println(sum(probs))
+
+
+#CODE TO CHECK WEIGHTED_RHO WORKS (i have no clue tbh)
+
+rho_final = weighted_rho(rho_1_tensor, probs,dim_aux, dim_sys, dim_env) #produces a square matrix of size dim_env*dim_sys, it is a state with unit trace
+#println(tr(rho_final))
+
