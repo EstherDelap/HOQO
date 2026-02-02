@@ -251,10 +251,6 @@ function weighted_rho(rho, probs ,dim_aux, dim_sys, dim_env)
     return(rho_final/tr(rho_final))
 end
 
-
-
-
-
 dim_sys = 2
 dim_env = 3
 dim_aux = 2
@@ -272,7 +268,7 @@ U = haar_measure(dim_sys*dim_aux) #dim_sys*dim_a
 
 
 
-#CODE TO CHECL APPLY_PARTIAL_UNITARY_VEC WORKS
+#CODE TO CHECK APPLY_PARTIAL_UNITARY_VEC WORKS
 
 rho_1 = apply_partial_unitary_vec(rho, a, U, dim_env) #takes in rho as a matrix on spaces {env, sys}, outputs a vector rho' on spaces {env, sys, aux} 
 #rho_2 = vec(apply_partial_unitary(rho, a, U, dim_env))
