@@ -57,11 +57,10 @@ function rand_rho(dim)
     return(vec_norm * vec_norm') #returns the density matrix of this normalised vector
 end
 
-
 function vec_choi(choi, dim_in, dim_out)
     """
     Generates the 'vecotised' version of the choi matrix, choi_v,  defined by the equation 
-    vec(choi*rho)= choi_v vec(rho)
+    vec(choi*rho)= choi_v * vec(rho)
 
     Parameters
     ---
@@ -98,7 +97,8 @@ function haar_measure(dim)
     q: a random matrix sampled over the Haar measure, code taken from arXiv.0609050, p. 11
 
     """
-    z = randn(Complex{Float64},(dim,dim))/sqrt(2) #random complex matrix 
+    #z = randn(Complex{Float64},(dim,dim))/sqrt(2) #random complex matrix 
+    z = randn(Float64,(dim,dim))/sqrt(2) 
 
     F=qr(z)
     q = F.Q #this is a unitary matrix, i.e. q*q'=idenitity
@@ -157,6 +157,8 @@ function prob_b(rho, dim_sys, dim_env, dim_aux)
     Calculates the probabilities of measuring the auxilliary system in states in b_array, given rho is a tri-partitie state ordered as {env,sys,aux} 
     and b_array is an array containg the values that the (two-dimensional) auxilliary system can take 
 
+    COULD POSSIBLY COMBINE WITH THE FUNCTION MEASUREMENT_COMP
+
     Parameters
     ---
     rho: a tripartite state, so a 6 dimensional tensor {dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env}
@@ -178,7 +180,7 @@ function prob_b(rho, dim_sys, dim_env, dim_aux)
 
     for b in range(1,dim_aux)
         rho_b=reshape(rho[b,:,:,b,:,:], (dim_sys*dim_env, dim_sys*dim_env)) #the subatrix rho_{i,i',b'';j,j',b''} then reshaped as a matrix
-        append!(probs, tr(rho_b)) #tr(rho_b) should be the probability that b is meaured 
+        append!(probs, tr(rho_b)) #tr(rho_b) should be the probability that b is measured 
     end
 
     return(probs) #an array of probabilities, should (and does) sum to 1
@@ -202,10 +204,41 @@ function weighted_rho(rho, probs ,dim_aux, dim_sys, dim_env)
 
     w = aweights(probs) #turned the array into type AbstractWeights (not sure if we should be using aweights or just weights)
     index_list = collect(1:dim_aux) #a vector of integers from 1 to the length of weights== dim_aux (usually 2)
-    i = sample(index_list, w) #samples a value from index_list, weighted by the values in w 
-    println(i)
+    i = sample(index_list, w) #samples a value from index_list, weighted by the values in w
     rho_final = reshape(rho[i,:,:,i,:,:], (dim_sys*dim_env, dim_sys*dim_env))
     
-    return(rho_final/tr(rho_final))
+    return(rho_final/tr(rho_final),i)
 end
 
+
+
+function comb_one_step(rho, dim_env, dim_sys; a=[1 0; 0 0], U=haar_measure(dim_sys*size(a)[1]), choi=rand_CPTP(dim_env*dim_sys,dim_env*dim_sys) )
+    """
+    Performs a quantum superchannel, so one 'step' within a quantum comb, by applying the unitary U on the system and auxiliary space, then measuring
+    the auxiliary space and sampling the environment-system space based on the probabilities of the outcomes of measuring the auxilliary space a. Finally,
+    the choi matrix of a CPTP map is applied to the environment and system state. 
+
+    Parameters
+    ---
+    rho: the joint system-environment state, so a square matrix of dimensions dim_env*dim_sys, positive and unit trace
+    dim_env: the dimensions of the envionment space, integer
+    dim_sys: the dimensions of the system space, integer
+    a: (optional) the density matric of the state of the auxiliary space, assumed to be |0><0|=[1,0]*[1,0]'
+    U: (optional) the unitary matrix to be applied, so a matrix of dimensions dim_sys*dim_aux, assumed to be a random matrix sampled over the Haar measure 
+    choi: (optional) the choi matrix of the map to be applied to the joint system-environment state, so a square matrix of dimensions (dim_env*dim_sys)^2,
+    assumed to be a random CPTP map
+
+    Returns
+    ---
+    rho_final: the joint system-environment state achieved after applying the unitary U to the system and auxilliary space, sampling the system-environment 
+    state from the probabilities of measuring the outcomes of the auxilliary space, then applying the choi state, so it is a square matrix of dimensions 
+    dim_sys*dim_env
+
+    """
+    dim_aux = size(a)[1]
+    rho_U = reshape(apply_partial_unitary_vec(rho, a, U, dim_env), (dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env))#this is a vectorised version of rho'=U*rho*U^dag, then reshaped into a rank 6 tensor
+    probs = prob_b(rho_U, dim_sys, dim_env, dim_aux)
+    rho_b, b = weighted_rho(rho_U, probs, dim_aux, dim_sys, dim_env) #dim_sys*dim_env square matrix, normalised so tr = 1
+    rho_final = vec_choi(choi, dim_env*dim_sys, dim_env*dim_sys) * vec(rho_b) #vector of length (dim_env*dim_sys)^2
+    return reshape(rho_final, (dim_env*dim_sys, dim_env*dim_sys)) #should be a normalised state, so trace 1 and positive eigenvalues
+end
