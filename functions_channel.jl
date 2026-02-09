@@ -45,16 +45,14 @@ function one_simplified_round(choi,dim)
     snapshot: given by (U^*|0><0|U^T) ⊗ (W^dag |b><b| W), then need to apply an inverse map to get the shadow of the map represented by choi
     """
     rho = proj(ket(1,dim))
-    println(rho)
     U = haar_measure(dim)
     W = haar_measure(dim)
     rho_end = reshape(vec_unitary(W)*vec_choi(choi, dim, dim)*vec_unitary(U)*vec(rho),(dim,dim))
-    println(size(rho_end))
     b,state_b = measure_comp(rho_end) #state_b should be a dim by dim vector
     
     first = conj(U)*rho*transpose(U)
     second = W' * state_b * W
-    return first ⊗ second
+    return convert(Matrix{Float64}, first ⊗ second) #returns (U^*|0><0|U^T) ⊗ (W^dag |b><b| W)
 end
 
 function inverse_M(mu)
@@ -99,6 +97,7 @@ end
 
 function apply_inverse_M(mu,rho)
     """
+    USE IF YOU CAN GET SEPARATE MU AND RHO
     Applies the inverse measurement channel to mu and to rho, 
     M^(-1)(mu)⊗M^(-1)(rho) == (M_v^(-1)⊗M_v^(-1)) * (vec(mu) ⊗ vec(rho))
     
@@ -120,6 +119,7 @@ end
 
 function apply_inverse_M_tensored(state)
     """
+    USE IF YOU CAN ONLY GET THE TENSOR PRODUCT RHO ⊗ MU 
     applies the inverse measurement channel to state = mu ⊗ rho
 
     Parameters
@@ -134,22 +134,60 @@ function apply_inverse_M_tensored(state)
     vec_mu_rho=vec(permutedims(reshape(vec(state),(d,d,d,d)),(1,3,2,4)))
     separated = reshape((inverse_M_vec(d) ⊗ inverse_M_vec(d))*(vec_mu_rho), (d, d, d, d) )
     permuted = permutedims(separated, (1,3,2,4))
-    #permuted = (inverse_M_vec(d) ⊗ inverse_M_vec(d))* vec_mu_rho
     return reshape(permuted, (d^2,d^2))
 end
 
-d = 3
-rho = rand_rho(d)
-mu = rand_rho(d)
+
+function channel_tomography(lambda, d ,n_rounds)
+    """
+    (we could probs make this more general)
+    Performs shadow tomography on the channel lambda by forming random unitaries and appling them to lambda. 
+    Lambda should go from input space of dimensions d to output space of same dimensions. We apply random unitaries and record
+    the guess (U^*|0><0|U^T)⊗(W^dag |b><b| W) for a number n_rounds, forms the average value then performs the inverse 
+    measurement channel, M^(-1) ⊗ M^(-1), onto this state. This is the shadow of the channel lambda.
+
+    Parameters
+    ---
+    lambda: a choi matrix  for a map that goes from a system of dimensions d to an output system of same dimensions. 
+    so a square matrix of dimensions d^2
+    d: the dimensions of the input and output state
+    n_rounds: the number of rounds to perform shadow tomography
+
+    Returns
+    ---
+    shadow_exp: the expectation value of the shadow of gamma, given by the inverse maps M^(-1)⊗M^(-1), applied to the average of the outcome of n_rounds of 
+    one_simplified_round, which gives (U*|0><0|U^T)⊗(W^+|b><b|W). 
+    """
+    ave = zeros(d^2,d^2)
+    for i=1:n_rounds
+        ave+= one_simplified_round( lambda, d )
+    end
+    return(apply_inverse_M_tensored(ave/n_rounds))
+end
+
+#d = 3
+#rho = rand_rho(d)
+#mu = rand_rho(d)
 
 #shows how to get to vec(rho) ⊗ vec(mu) from vec(rho ⊗ mu) by permuting dimensions
 #println(vec(permutedims(reshape(vec(rho ⊗ mu),(d,d,d,d)),(1,3,2,4))))
 #println(vec(rho) ⊗ vec(mu))
 
-#showing that the function apply_inverse_M(rho,mu) = M_v^(-1) ⊗ M_v^(-1) * (vec(rho) ⊗ vec(mu)) 
+#showing that the function apply_inverse_M(rho,mu) == M_v^(-1) ⊗ M_v^(-1) * (vec(rho) ⊗ vec(mu)) 
 #println(apply_inverse_M(mu,rho))
 #println(inverse_M(mu) ⊗ inverse_M(rho))
 
 #showing how apply_inverse_M_tensored works
-apply_inverse_M_tensored(rho ⊗ mu)
-apply_inverse_M(rho,mu)
+#apply_inverse_M_tensored(rho ⊗ mu)
+#apply_inverse_M(rho,mu)
+
+d=2
+choi = rand_CPTP(d,d)
+choi = Matrix{Int64}(I,d^2,d^2)
+println(choi)
+
+guess = channel_tomography(choi, d , 10000000)
+#these are not equal ...
+isapprox.(choi,guess,rtol=0.2 )
+
+println(guess)
