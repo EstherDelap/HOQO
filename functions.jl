@@ -31,11 +31,8 @@ function rand_CPTP(dim_in, dim_out)
     B = inv(sqrt(E)) ⊗ Matrix{Int64}(I,dim_out,dim_out) #defined on input and output space, ordered as (input,ouput)
     
     C = B * pos_A * B #ordered as (input, output, input, output) 
-
     return C
 end
-
-
 
 
 function rand_rho(dim)
@@ -49,18 +46,42 @@ function rand_rho(dim)
     Returns
     ---
     rho: a density matrix, so a matrix of size dim by dim that obeys tr(rho^2) = 1
-
     """
-
     v = randn(dim)
     vec_norm = (1/ norm(v))*v #normalising the random vector of dimensions dim
     return(vec_norm * vec_norm') #returns the density matrix of this normalised vector
 end
 
+function choi_function(F::Function,dim_in, dim_out)
+    """
+    Forms the choi matrix of the function F, which goes from dim_in to dim_out. This is defined as
+    the function F action on half a maximally entangled state.
+    
+    Parameters
+    ---
+    F: the linear function, going from dim_in to dim_out
+    dim_in: integer, the dimensions of the input space
+    dim_out: integer, the dimensions of the output space
+
+    Returns
+    ---
+    choi_F: the choi matrix of the function F, formed by applying F to half of a maximally 
+    entangled state that is defined on dim_in ⊗ dim_in, so choi_F = dum_{i,j} F(|i><j|) ⊗ |i><j|
+    """
+
+    choi_F = zeros(dim_in^2,dim_out^2)
+    for i=1:dim_in
+        for j=1:dim_in
+            choi_F += F(ket(i,dim_in)⊗bra(j,dim_in)) ⊗ ket(i,dim_in)⊗bra(j,dim_in)
+        end
+    end
+    return choi_F
+end
+
 function vec_choi(choi, dim_in, dim_out)
     """
     Generates the 'vecotised' version of the choi matrix, choi_v,  defined by the equation 
-    vec(choi*rho)= choi_v * vec(rho)
+    vec(choi[rho])= choi_v * vec(rho)
 
     Parameters
     ---
@@ -75,12 +96,10 @@ function vec_choi(choi, dim_in, dim_out)
     """
 
     #turn the choi matrix into a tensor so we can permute it's indices
-    choi_tensor = reshape(choi, (dim_out, dim_in, dim_out, dim_in)) #the choi matrix is stored as C_(i' i; j' j)
+    choi_tensor = reshape(choi, (dim_in, dim_out, dim_in, dim_out)) #the choi matrix is stored as C_(i' i; j' j)
 
     choi_v = permutedims(choi_tensor, (1,3,2,4)) #permutes the indices to C_(i' j'; i j)
-
     return reshape(choi_v,(dim_out^2,dim_in^2))
-
 end
 
 
@@ -97,18 +116,15 @@ function haar_measure(dim)
     q: a random matrix sampled over the Haar measure, code taken from arXiv.0609050, p. 11
 
     """
-    #z = randn(Complex{Float64},(dim,dim))/sqrt(2) #random complex matrix 
-    z = randn(Float64,(dim,dim))/sqrt(2) 
+    z = randn(Complex{Float64},(dim,dim))/sqrt(2) #random complex matrix 
 
-    F=qr(z)
+    F = qr(z)
     q = F.Q #this is a unitary matrix, i.e. q*q'=idenitity
-    r=F.R
+    r = F.R
     
-    d = diag(r) #this is a vecotr containg the diagonal elements of r
-    ph = d ./ broadcast(abs, d) #forming th diagonal matrix with each diagonal element being r_{ii}/|r_{ii}|
-    
-    Q = q .* ph  #element-wise matrix multiplication
-    return Q
+    d = diag(r) #this is a vector containg the diagonal elements of r
+    ph = d ./ broadcast(abs, d) #forming the vector where each element being r_{ii}/|r_{ii}|
+    return q .* ph'
 end
 
 
@@ -201,7 +217,6 @@ function weighted_rho(rho, probs ,dim_aux, dim_sys, dim_env)
     rho_new: a normalised two-partite state as a square matrix of dimensions dim_sys*dim_env
 
     """
-
     w = aweights(probs) #turned the array into type AbstractWeights (not sure if we should be using aweights or just weights)
     index_list = collect(1:dim_aux) #a vector of integers from 1 to the length of weights== dim_aux (usually 2)
     i = sample(index_list, w) #samples a value from index_list, weighted by the values in w
@@ -210,35 +225,3 @@ function weighted_rho(rho, probs ,dim_aux, dim_sys, dim_env)
     return(rho_final/tr(rho_final),i)
 end
 
-
-
-function comb_one_step(rho, dim_env, dim_sys; a=[1 0; 0 0], U=haar_measure(dim_sys*size(a)[1]), choi=rand_CPTP(dim_env*dim_sys,dim_env*dim_sys) )
-    """
-    Performs a quantum superchannel, so one 'step' within a quantum comb, by applying the unitary U on the system and auxiliary space, then measuring
-    the auxiliary space and sampling the environment-system space based on the probabilities of the outcomes of measuring the auxilliary space a. Finally,
-    the choi matrix of a CPTP map is applied to the environment and system state. 
-
-    Parameters
-    ---
-    rho: the joint system-environment state, so a square matrix of dimensions dim_env*dim_sys, positive and unit trace
-    dim_env: the dimensions of the envionment space, integer
-    dim_sys: the dimensions of the system space, integer
-    a: (optional) the density matric of the state of the auxiliary space, assumed to be |0><0|=[1,0]*[1,0]'
-    U: (optional) the unitary matrix to be applied, so a matrix of dimensions dim_sys*dim_aux, assumed to be a random matrix sampled over the Haar measure 
-    choi: (optional) the choi matrix of the map to be applied to the joint system-environment state, so a square matrix of dimensions (dim_env*dim_sys)^2,
-    assumed to be a random CPTP map
-
-    Returns
-    ---
-    rho_final: the joint system-environment state achieved after applying the unitary U to the system and auxilliary space, sampling the system-environment 
-    state from the probabilities of measuring the outcomes of the auxilliary space, then applying the choi state, so it is a square matrix of dimensions 
-    dim_sys*dim_env
-
-    """
-    dim_aux = size(a)[1]
-    rho_U = reshape(apply_partial_unitary_vec(rho, a, U, dim_env), (dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env))#this is a vectorised version of rho'=U*rho*U^dag, then reshaped into a rank 6 tensor
-    probs = prob_b(rho_U, dim_sys, dim_env, dim_aux)
-    rho_b, b = weighted_rho(rho_U, probs, dim_aux, dim_sys, dim_env) #dim_sys*dim_env square matrix, normalised so tr = 1
-    rho_final = vec_choi(choi, dim_env*dim_sys, dim_env*dim_sys) * vec(rho_b) #vector of length (dim_env*dim_sys)^2
-    return reshape(rho_final, (dim_env*dim_sys, dim_env*dim_sys)) #should be a normalised state, so trace 1 and positive eigenvalues
-end

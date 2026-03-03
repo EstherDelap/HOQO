@@ -1,4 +1,7 @@
 include("functions.jl")
+include("functions_channel.jl")
+using StatsPlots
+using RandomMatrices
 
 function act_map_choi(choi, rho, dim_in, dim_out)
     """
@@ -20,30 +23,6 @@ function act_map_choi(choi, rho, dim_in, dim_out)
 
     return ptrace(total, [dim_in, dim_out], 1)
 end
-
-function apply_partial_unitary(rho, a, U, dim_env)
-    """
-    For the system environement state rho and the auxilliary space a, applies the unitary U to the systme and auxilliary space by the usual 
-    way
-
-    Parameters
-    ---
-    rho: the joint system-environment state, a square matrix of dimensions dim_sys*dim_env that is positive and of unit trace.
-    a: the auxilliary system initial state, a square matrix of dimensions dim_a, positive and unit trace (usually 2-dimensional)
-    U: the unitary matrix applied to the system and auxilliary space, so a square matrix of dimensions dim_sys*dim_a that obeys U*U'=I
-
-    Returns
-    ---
-    rho_new: a tri-partite state, so a square matrix of dimensions dim_env*dim_sys*dim_a, obtained by (I_env ⊗ U) (rho ⊗ a) (I_env ⊗ U)'
-    """
-    #dim_env = convert(Int,(size(rho)[1] * size(a)[1]) / size(U)[1])
-    state = rho ⊗ a #dim = dim_env*dim_sys*dim_aux
-    mult = Matrix{Int64}(I, dim_env, dim_env) ⊗ U #I_env ⊗ U, dim=dim_env*dim_sys*dim_aux
-    return mult * state * mult' #(I_env ⊗ U) (rho ⊗ a) (I_env ⊗ U)', a square matrix of dimensions dim_env*dim_sys*dim_aux
-
-end
-
-
 
 
 function testing_probabilities(rho, dim_aux, dim_env, dim_sys )
@@ -70,62 +49,99 @@ function testing_probabilities(rho, dim_aux, dim_env, dim_sys )
     return probs
 end
 
+function inverse_M(mu)
+    """
+    MEANT ONLY AS A CHECK 
+    Caclulates the inverse of the measurement channel, defined as the expectation value of the classical snapshot of a very simple channel of simply a unitary going from an input space to an 
+    output space of the same dimensions. so M(rho)= E(U^dag |b><b|U) and the inverse of the measurement channel is M^(-1)(mu)= (d+1)mu - tr(mu)*I
 
-dim_sys = 2
-dim_env = 2
-dim_aux = 2
-#rho = rand_rho(dim_sys*dim_env) #dim = dim_sys*dim_env (matrix)
-a=[1,0]*[1,0]' 
-#U= haar_measure(dim_sys*dim_aux) #dim_sys*dim_a
+    Parameters
+    ---
+    mu: a square matrix of dimensions d, something like U^dag |b><b|U
 
+    Returns
+    ---
+    inverse: given by (d+1)*(mu - I*tr(mu))
+
+    """
+    d = size(mu)[1]
+    Id =  Matrix{Int64}(I,d,d)
+    return((d+1)*mu) - (Id*tr(mu))
+end
+
+
+function map_M(rho,d)
+    """
+
+    """
+    Id = Matrix{Int64}(I,d,d)
+    return (1/(d+1))*((tr(rho)*Id)+rho)
+end
+
+function eigval_dist(num_rounds, dim)
+    eigs = zeros(0)
+    for n=1:num_rounds
+        eigs = cat( eigs, eigvals(haar_measure(dim)),dims=1)
+        #eigs = cat( eigs, eigvals(rand(CUE(dim))),dims=1)
+        #eigs = cat(eigs, eigvals(rand( Haar(2), dim, 1) ),dims=1) 
+    end
+    return eigs
+end
 
 
 #CODE TO CHECK VEC_UNITARY WORKS
-
 #rho_dashed_normal = vec(U*rho*U')
 #rho_dashed_vec = vec_unitary(U) * vec(rho) #this is a vectorised version of rho' = U rho U^dag
-#println(isapprox(rho_dashed_normal, rho_dashed_vec))
+#println(norm(rho_dashed_normal-rho_dashed_vec))
 
+#CODE TO CHECK VEC_CHOI WORKS
+#dim = 4
+#choi = rand_CPTP(dim,dim)
+#rho = rand_rho(dim)
+#zero = proj(ket(1,dim))
+#Id = Matrix{Int64}(I,dim,dim) #I_out 
+#rho_dashed_1 = vec(ptrace( (transpose(rho) ⊗ Id) * choi , [dim,dim], [1]) )
+#rho_dashed_2 = vec_choi(choi,dim,dim)*vec(rho)
+#println(norm(rho_dashed_1-rho_dashed_2 ))
 
+#CODE TO CHECK VEC_UNITARY(w)*VEC_CHOI(CHOI)*VEC_UNITARY(U^DAG)*VEC(ZERO) WORKS 
+#dim = 4
+#rho = rand_rho(dim)
+#zero = proj(ket(1,dim))
+#U = haar_measure(dim)
+#W = haar_measure(dim)
+#choi = rand_CPTP(dim,dim)
+#Id = Matrix{Int64}(I,dim,dim) 
+#rho_3 = W*ptrace( (transpose(transpose(U)*zero*conj(U)) ⊗ Id)*choi, [dim,dim],[1])*W'
+#rho_1 = W*ptrace(choi*(Id  ⊗ transpose(transpose(U)*zero*conj(U))),[dim,dim],[2])*W'
+#rho_2 = reshape(vec_unitary(W)*vec_choi(choi,dim,dim)*vec_unitary(transpose(U))*vec(zero),(dim,dim))
+#println(norm(rho_3-reshape(rho_2,(dim,dim))))
 
-#CODE TO CHECK APPLY_PARTIAL_UNITARY_VEC WORKS
+#SHOWS HOW TO GET VEC(RHO)  ⊗ VEC(MU) FROM VEC(RHO  ⊗  MU) BY PERMUTING DIMENSIONS
+#d=4
+#rho = rand_rho(d)
+#mu = rand_rho(d)
+#murho1 = vec(permutedims(reshape(vec(rho ⊗ mu),(d,d,d,d)),(1,3,2,4)))
+#murho2 = vec(rho) ⊗ vec(mu)
+#println(norm(murho1-murho2))
 
-#rho_1 = apply_partial_unitary_vec(rho, a, U, dim_env) #takes in rho as a matrix on spaces {env, sys}, outputs a vector rho' on spaces {env, sys, aux} 
+#SHOWING INVERSE_M WORKS
+#d=4
+#mu=haar_measure(d)
+#rho=haar_measure(d)
+#mu_1 = vec(inverse_M(mu))
+#mu_2 = inverse_M_vec(d) * vec(mu)
+#println(norm(mu_1-mu_2))
+#mu_3 = vec(inverse_M_1(mu))
+#mu_4 = d*inverse_M_vec(d) * vec(mu)
+#println(norm(mu_3-mu_4)/norm(mu_3))
 
-#rho_2 = vec(apply_partial_unitary(rho, a, U, dim_env))
-#println(isapprox( rho_1, rho_2))
+#SHOWING HOW APPLY_INVERSE_M_TENSORED WORKS
+#M_1 = apply_inverse_M_tensored(mu ⊗ rho)
+#M_2 = (d*inverse_M(mu)) ⊗ inverse_M(rho)
+#println(norm(M_2-M_1))
 
-#rho_1_tensor = reshape(rho_1,(dim_aux,dim_sys,dim_env,dim_aux,dim_sys,dim_env))
-
-
-
-#CODE TO CHECK PROB_B WORKS (at least it returns probabilities that sum to 1)
-
-#probs = prob_b( rho_1_tensor , dim_sys, dim_env, dim_aux) #rho must be a rank 6 tensor 
-#println(sum(probs))
-#testing_probabilities(reshape(rho_1 , (dim_aux*dim_env*dim_sys, dim_aux*dim_env*dim_sys)), dim_aux, dim_env, dim_sys )
-
-#CODE CHECKING IT WORKS WITH STATES AND UNITARIES THAT WE KNOW
-
-
-U = [1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0] #the CNOT gate unitary
-
-#rho = ([1,0]*[1,0]') ⊗ (1/2*[1,1]*[1,1]')
-#rho_dashed = reshape(apply_partial_unitary_vec(rho, a, U, dim_env), (dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env))
-#rho_dashed = reshape(apply_partial_unitary_vec(rho, a, U, dim_env), (dim_aux*dim_sys*dim_env, dim_aux*dim_sys*dim_env))
-
-#testing_probabilities(rho_dashed, dim_aux, dim_env, dim_sys ) #should produce probabilities 0.5, 0.5
-
-#probs = prob_b(rho_dashed, dim_sys, dim_env, dim_aux ) #should produce probabilities 0.5, 0.5
-#rho_final = weighted_rho(rho_dashed, probs, dim_aux, dim_sys, dim_env)  #produces either |00> if b is measured as |0> (i.e. 1 is printed) or |01> if b is measured as |1> (i.e. 2 is printed)
-
-
-alpha = 0.4 #for psi to be normalised, mist be between 0 and 1
-psi = sqrt(alpha ) * [1,0] + sqrt(1-alpha) * [0,1]
-rho = (1/2*[1 1; 1 1]) ⊗ (psi * psi') 
-rho_dashed = reshape(apply_partial_unitary_vec(rho, a, U, dim_env), (dim_aux, dim_sys, dim_env, dim_aux, dim_sys, dim_env))
-
-#testing_probabilities(rho_dashed, dim_aux, dim_env, dim_sys ) #should prodce probabilities alpha and 1-alpha
-
-probs = prob_b(rho_dashed , dim_sys, dim_env, dim_aux ) #should produce probabilities alpha and 1-alpha
-rho_final = weighted_rho(rho_dashed, probs, dim_aux, dim_sys, dim_env) 
+#TO CHECK THE HAAR MEASURE WORKS
+#a = eigval_dist(10000,50)
+#density(angle.(a))
+#println(norm(choi - apply_inverse_M_tensored(average_shadow)) / norm(apply_inverse_M_tensored(average_shadow))) 
