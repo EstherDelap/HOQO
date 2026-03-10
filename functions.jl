@@ -224,4 +224,3 @@ function weighted_rho(rho, probs ,dim_aux, dim_sys, dim_env)
     
     return(rho_final/tr(rho_final),i)
 end
-

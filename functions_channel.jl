@@ -24,6 +24,7 @@ function measure_comp(state)
     dim=size(state)[1]
     basis = Vector{Matrix{ComplexF64}}(undef, 0)
     for ind in 1:dim
+        
         append!(basis, [proj(ket(ind,dim))])
     end
     M = POVMMeasurement(basis)
@@ -116,13 +117,13 @@ function M_1_4(gamma,d)
     forms a vectorised version of the two maps M^(1)⊗M^(4)[choi]  
     """
     vec_mu_rho = vec(permutedims(reshape(vec(gamma),(d,d,d,d)),(1,3,2,4)))
-    separated = reshape( ( map_M_vec(d) ⊗ (map_M_vec(d)/d) )*(vec_mu_rho) , (d, d, d, d) )
+    separated = reshape( ( M_vec(d) ⊗ (M_vec(d)/d) )*(vec_mu_rho) , (d, d, d, d) )
     permuted = permutedims(separated, (1,3,2,4))
     return reshape(permuted, (d^2,d^2))
 end
 
 
-function channel_tomography(lambda, d ,n_rounds, existing_ave_inversed, existing_ave_mapped; is_state = false)
+function channel_tomography(lambda, d ,n_rounds, existing_ave_inversed, existing_ave_mapped, prev_n_rounds; is_state = false)
     """
     Performs shadow tomography on the channel or state lambda by forming random unitaries and appling them to lambda. 
     Record the guess (U^*|0><0|U^T)⊗(W^dag |b><b| W) or (W^dag |b><b| W) for a number n_rounds, form the average value 
@@ -154,7 +155,9 @@ function channel_tomography(lambda, d ,n_rounds, existing_ave_inversed, existing
     ave=ave/n_rounds
     
     if is_state == false
-        return( (inverse_M_1_4(ave) + existing_ave_inversed)/2, (ave+existing_ave_mapped)/2 )
+        inversed_ave = (inverse_M_1_4(ave)*n_rounds + existing_ave_inversed*prev_n_rounds)/(n_rounds + prev_n_rounds)
+        mapped_ave = (ave*n_rounds +existing_ave_mapped*prev_n_rounds)/(n_rounds + prev_n_rounds) 
+        return( inversed_ave, mapped_ave )
     else
         return(reshape(inverse_M_vec(d)*vec(ave), (d,d)))
     end
@@ -192,7 +195,7 @@ function plot_shots(choi, d, total_n; mu = I, start = 1, state= false)
         num_rounds = 10^n
         append!(shots,num_rounds )
 
-        ave_inverse, ave_mapped = channel_tomography(choi, d, num_rounds-shots[end-1], ave_inverse, ave_mapped, is_state=state)
+        ave_inverse, ave_mapped = channel_tomography(choi, d, num_rounds-shots[end-1], ave_inverse, ave_mapped, shots[end-1], is_state=state)
             
         append!(rel_err_inv_map, norm( choi-ave_inverse) / norm(choi))
         append!(rel_err_map, norm( choi_mapped-ave_mapped) / norm(choi_mapped) )
@@ -200,12 +203,11 @@ function plot_shots(choi, d, total_n; mu = I, start = 1, state= false)
     return deleteat!(shots,1), rel_err_inv_map, rel_err_map
 end
 
-total_num_shots = 7
+#total_num_shots = 7
+#dim = 2
+#rho = rand_rho(dim)
+#choi = rand_CPTP(dim,dim)
+#x, y, y_2= plot_shots(choi, dim, total_num_shots, start = 3)
+#plot(x, [y y_2], xaxis = :log10, layout=(2, 1),label = ["M^(-1,-4)[ave] vs Choi" "ave vs M^(1,4)[Choi]"])
 
-dim = 2
-rho = rand_rho(dim)
-choi = rand_CPTP(dim,dim)
 
-x, y, y_2= plot_shots(choi, dim, total_num_shots, start = 3)
-
-plot(x, [y y_2], xaxis = :log10, layout=(2, 1), legend=false)
